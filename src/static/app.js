@@ -23,7 +23,12 @@ document.addEventListener("DOMContentLoaded", () => {
         // Create participants list HTML
         const participantsList = details.participants.length > 0 
           ? `<ul class="participants-list">
-               ${details.participants.map(participant => `<li>${participant}</li>`).join('')}
+               ${details.participants.map(participant => 
+                 `<li>
+                    <span class="participant-email">${participant}</span>
+                    <button class="delete-btn" onclick="unregisterParticipant('${name}', '${participant}')" title="Remove participant">✕</button>
+                  </li>`
+               ).join('')}
              </ul>`
           : '<p class="no-participants">No participants yet</p>';
 
@@ -73,6 +78,14 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        
+        // Refresh the activities list to show updated participant count
+        try {
+          await refreshActivitiesList();
+        } catch (refreshError) {
+          console.warn("Failed to refresh activities list:", refreshError);
+          // Don't show error to user since the signup was successful
+        }
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -94,4 +107,73 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize app
   fetchActivities();
+
+  // Helper function to refresh the activities list
+  async function refreshActivitiesList() {
+    // Clear loading message
+    activitiesList.innerHTML = "<p>Loading activities...</p>";
+    
+    // Clear activity select options (except the first one)
+    while (activitySelect.children.length > 1) {
+      activitySelect.removeChild(activitySelect.lastChild);
+    }
+    
+    // Fetch and display updated activities
+    await fetchActivities();
+  }
+
+  // Function to unregister a participant from an activity
+  async function unregisterParticipant(activityName, email) {
+    if (!confirm(`Are you sure you want to remove ${email} from ${activityName}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activityName)}/unregister?email=${encodeURIComponent(email)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.detail || "Failed to unregister");
+      }
+
+      const result = await response.json();
+      
+      // Show success message
+      messageDiv.textContent = result.message;
+      messageDiv.className = "success";
+      messageDiv.classList.remove("hidden");
+
+      // Hide message after 3 seconds
+      setTimeout(() => {
+        messageDiv.classList.add("hidden");
+      }, 3000);
+
+      // Refresh the activities list to show updated participant count
+      try {
+        await refreshActivitiesList();
+      } catch (refreshError) {
+        console.warn("Failed to refresh activities list:", refreshError);
+        // Don't show error to user since the unregister was successful
+      }
+
+    } catch (error) {
+      messageDiv.textContent = "Failed to unregister participant. Please try again.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      console.error("Error unregistering participant:", error);
+      
+      // Hide message after 5 seconds
+      setTimeout(() => {
+        messageDiv.classList.add("hidden");
+      }, 5000);
+    }
+  }
+
+  // Make unregisterParticipant available globally for onclick handlers
+  window.unregisterParticipant = unregisterParticipant;
 });
